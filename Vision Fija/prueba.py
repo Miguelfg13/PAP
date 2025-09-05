@@ -4,7 +4,14 @@ import math
 import time
 
 # ==========================
-#  Apertura de cámara Win)
+#  Modo de prueba con imagen
+# ==========================
+USE_STATIC_IMAGE = True
+IMAGE_PATH       = "aruco_test_scene.png"   # <- cambia si tu archivo se llama distinto
+TARGET_W, TARGET_H = 1920, 1080             # resolución de trabajo de tu app
+
+# ==========================
+#  Apertura de cámara (Win)
 # ==========================
 def open_camera(index=1, width=1920, height=1080, fps=30, prefer_mjpg=True):
     cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
@@ -47,6 +54,47 @@ def open_camera(index=1, width=1920, height=1080, fps=30, prefer_mjpg=True):
 
     print(f"[INFO] Resolución activa: {aw}x{ah} @ {afps:.1f} FPS")
     return cap
+
+# ==========================
+#  Fuente de frames unificada
+# ==========================
+class FrameSource:
+    """
+    Provee .read() y .release() sea desde cámara o imagen estática.
+    En modo imagen, devuelve copias del mismo frame para mantener el pipeline.
+    """
+    def __init__(self, use_static_image, image_path, width, height, fps=30, cam_index=1):
+        self.use_static = use_static_image
+        self.fps_delay = 1.0 / max(1, fps)
+        self._last_time = 0.0
+        self.cap = None
+        self.frame_static = None
+        if self.use_static:
+            img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            if img is None:
+                raise FileNotFoundError(f"No pude leer la imagen: {image_path}")
+            # redimensiona si es necesario para igualar tu pipeline
+            if (img.shape[1], img.shape[0]) != (width, height):
+                img = cv2.resize(img, (width, height), interpolation=cv2.INTER_AREA)
+            self.frame_static = img
+            print(f"[INFO] Modo imagen estática: {image_path} -> {width}x{height}")
+        else:
+            self.cap = open_camera(index=cam_index, width=width, height=height, fps=int(1/self.fps_delay), prefer_mjpg=True)
+
+    def read(self):
+        if self.use_static:
+            # tasa “FPS” aproximada para que no consuma 100% CPU
+            now = time.time()
+            if now - self._last_time < self.fps_delay:
+                time.sleep(max(0.0, self.fps_delay - (now - self._last_time)))
+            self._last_time = time.time()
+            return True, self.frame_static.copy()
+        else:
+            return self.cap.read()
+
+    def release(self):
+        if self.cap is not None:
+            self.cap.release()
 
 # ==========================
 #  ArUco + Homografía
@@ -118,7 +166,7 @@ from firebase_admin import credentials as _cred, db as _db, initialize_app as _f
 # --- CONFIG --- (ajústalo si tu proyecto difiere)
 CRED_PATH       = "cred.json"
 DB_URL          = "https://iot-app-f878d-default-rtdb.firebaseio.com/"
-ROBOT_ID_PATH   = "robots/123456" 
+ROBOT_ID_PATH   = "robots/123456"
 INSTR_PATH      = f"{ROBOT_ID_PATH}/instrucciones"
 
 # Ganancias: error (en celdas de la malla) -> comando (vx, vy). w según orientación.
@@ -207,7 +255,7 @@ def goto_controller_step(gx, gy, heading_deg):
 
     if dist <= POS_TOL:
         _send_cmd(0, 0, 0)
-        # No limpiamos objetivo para que mantenga posición (puedes llamar clear_target() con 'p')
+        # Mantiene posición; usa clear_target() con 'p' si quieres limpiar.
         print(f"[GOTO] Llegada: dist={dist:.2f}.")
         return
 
@@ -272,7 +320,14 @@ def on_mouse(event, x, y, flags, param):
 # ==========================
 def main():
     global CURRENT_H_INV, orient_move  # para callback y tecla 'm'
-    cap = open_camera(index=1, width=1920, height=1080, fps=30, prefer_mjpg=True)
+
+    # Fuente única (cámara o imagen)
+    src = FrameSource(
+        use_static_image=USE_STATIC_IMAGE,
+        image_path=IMAGE_PATH,
+        width=TARGET_W, height=TARGET_H,
+        fps=30, cam_index=1
+    )
 
     cv2.namedWindow("Cuadricula ArUco 1080p", cv2.WINDOW_NORMAL)
     DISPLAY_SCALE = 0.75  # zoom de la ventana (solo visualización)
@@ -284,13 +339,13 @@ def main():
     current_H_inv = None
 
     while True:
-        ret, frame = cap.read()
+        ret, frame = src.read()
         if not ret or frame is None:
             misses += 1
-            if misses > MAX_MISSES:
+            if not USE_STATIC_IMAGE and misses > MAX_MISSES:
                 print("[WARN] Reintentando abrir cámara…")
-                cap.release()
-                cap = open_camera(index=0, width=1920, height=1080, fps=30, prefer_mjpg=True)
+                src.release()
+                src = FrameSource(False, "", TARGET_W, TARGET_H, fps=30, cam_index=0)
                 misses = 0
             continue
         misses = 0
@@ -316,6 +371,7 @@ def main():
                     centers_px[int(mid)] = c.mean(axis=0)
 
             if len(centers_px) == 4:
+                # ¡OJO! order_quad usa TL,TR,BR,BL según sus posiciones en imagen
                 pts_dst = order_quad([centers_px[k] for k in centers_px.keys()])  # TL,TR,BR,BL
                 pts_src = np.array([[0.,0.],[1.,0.],[1.,1.],[0.,1.]], dtype=np.float32)
                 H = cv2.getPerspectiveTransform(pts_src, pts_dst)
@@ -336,8 +392,8 @@ def main():
 
                 # (u,v) con origen arriba-izq -> invertimos v para abajo-izq
                 u, v_top = pix_to_grid_uv((px, py), current_H_inv)
-                u = np.clip(u, 0.0, 1.0)
-                v = 1.0 - np.clip(v_top, 0.0, 1.0)
+                u = float(np.clip(u, 0.0, 1.0))
+                v = 1.0 - float(np.clip(v_top, 0.0, 1.0))
 
                 gx = u * GRID_N
                 gy = v * GRID_N
@@ -355,7 +411,7 @@ def main():
                 cv2.putText(frame, f"Robot ({gx:.2f}, {gy:.2f}) Ang_grid: {angle_grid:.1f} deg",
                             (px+10, py), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
 
-                # ====== (AÑADIDO) Paso del controlador GOTO ======
+                # ====== Paso del controlador GOTO ======
                 goto_controller_step(gx, gy, angle_grid)
 
         # --------- HUD de ayuda ----------
@@ -368,8 +424,14 @@ def main():
             cv2.putText(frame, line, (12, y0 + 22*i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (20,20,20), 3)
             cv2.putText(frame, line, (12, y0 + 22*i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
 
+        # Overlay de modo imagen
+        if USE_STATIC_IMAGE:
+            txt = "MODO IMAGEN ESTATICA"
+            cv2.putText(frame, txt, (12, frame.shape[0]-20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 3)
+            cv2.putText(frame, txt, (12, frame.shape[0]-20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,255), 2)
+
         # --------- Display escalado para que quepa en pantalla ---------
-        disp = cv2.resize(frame, None, fx=DISPLAY_SCALE, fy=DISPLAY_SCALE,
+        disp = cv2.resize(frame, None, fx=_display_scale_ref["s"], fy=_display_scale_ref["s"],
                           interpolation=cv2.INTER_LINEAR)
         cv2.imshow("Cuadricula ArUco 1080p", disp)
 
@@ -377,18 +439,16 @@ def main():
         if k == 27:    # ESC
             break
         elif k in (ord('+'), ord('=')):   # zoom in
-            DISPLAY_SCALE = min(1.0, DISPLAY_SCALE + 0.05)
-            _display_scale_ref["s"] = DISPLAY_SCALE
+            _display_scale_ref["s"] = min(1.0, _display_scale_ref["s"] + 0.05)
         elif k in (ord('-'), ord('_')):   # zoom out
-            DISPLAY_SCALE = max(0.30, DISPLAY_SCALE - 0.05)
-            _display_scale_ref["s"] = DISPLAY_SCALE
+            _display_scale_ref["s"] = max(0.30, _display_scale_ref["s"] - 0.05)
         elif k == ord('p'):               # parar y limpiar objetivo
             clear_target()
         elif k == ord('m'):               # alternar modo orientación
             orient_move = not orient_move
             print(f"[GOTO] orient_move = {orient_move}")
 
-    cap.release()
+    src.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
