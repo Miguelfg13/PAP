@@ -10,7 +10,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 save_path = os.path.join(script_dir, "Fotos_Calibracion")
 os.makedirs(save_path, exist_ok=True)
 
-camweb = cv2.VideoCapture(1)
+camweb = cv2.VideoCapture(0)
+
+camweb.set(cv2.CAP_PROP_FRAME_HEIGHT, 1920)
+camweb.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
 
 if not camweb.isOpened():
     print("No se puede abrir la cámara")
