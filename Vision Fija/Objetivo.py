@@ -111,14 +111,14 @@ def pix_to_grid_uv(pt_pix, H_inv):
     return float(uv[0]), float(uv[1])
 
 # ======================================================================
-#  (AÑADIDO) Firebase + Control GOTO para enviar comandos al carrito
+#  Firebase + Control GOTO para enviar comandos al carrito
 # ======================================================================
 from firebase_admin import credentials as _cred, db as _db, initialize_app as _fb_init
 
 # --- CONFIG --- (ajústalo si tu proyecto difiere)
 CRED_PATH       = "iot-app-f878d-firebase-adminsdk-fbsvc-9384c3ff98.json"
 DB_URL          = "https://iot-app-f878d-default-rtdb.firebaseio.com/"
-ROBOT_ID_PATH   = "robots/123456"  # mismo que usa tu segundo script
+ROBOT_ID_PATH   = "robots/123456" 
 INSTR_PATH      = f"{ROBOT_ID_PATH}/instrucciones"
 
 # Ganancias: error (en celdas de la malla) -> comando (vx, vy). w según orientación.
