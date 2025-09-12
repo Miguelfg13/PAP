@@ -22,8 +22,8 @@ from firebase_admin import credentials, db
 # ==========================
 # Config Firebase (ajusta si cambias credenciales/URL)
 # ==========================
-CRED_PATH = "robomesha-firebase-adminsdk-fbsvc-365a5d6215.json"
-DB_URL    = "https://robomesha-default-rtdb.firebaseio.com"
+CRED_PATH = "cred.json"
+DB_URL= "https://iot-app-f878d-default-rtdb.firebaseio.com/"
 
 # Nodos base (NO cambiar estructura de instrucciones)
 ROOT_ROBOTS = "robots"
