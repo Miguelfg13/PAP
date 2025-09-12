@@ -1,12 +1,25 @@
 import cv2
 import numpy as np
 import os
+import json
+from datetime import date
+
+# Función para guardar los datos de la calibración
+def guardar_Datos(direccion_carpeta, matriz_camara, coeficientes_distorsion, fecha_calibracion):
+    data = {
+        "matriz_camara": matriz_camara.tolist(),
+        "coef_dist": coeficientes_distorsion.tolist(),
+        "fecha_calibracion": str(fecha_calibracion)
+    }
+
+    dir = os.path.join(direccion_carpeta, "parametros_camara.json")
+
+    with open(dir, "w") as f:
+        json.dump(data, f, indent=4)
 
 # Ruta absoluta del directorio donde está el script
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Crear la ruta a la carpeta "fotos" dentro del directorio del script
-images_path = os.path.join(script_dir, "fotos_ajedrez")
+images_path = os.path.join(script_dir, "Fotos_Calibracion") # fotos_ajedrez -> camara personal / Fotos_Calibracion -> camara laboratorio
 
 # Tamaño del patrón: número de esquinas internas (no cuadros)
 pattern_size = (7, 7)
@@ -48,6 +61,7 @@ ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
     objpoints, imgpoints, gray.shape[::-1], None, None
 )
 
+guardar_Datos(script_dir, camera_matrix, dist_coeffs, date.today())
 print("Matriz de cámara (intrínseca):\n", camera_matrix)
 print("Coeficientes de distorsión:\n", dist_coeffs)
 print("Reporjection error: ", ret)

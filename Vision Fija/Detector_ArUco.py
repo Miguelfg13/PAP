@@ -8,6 +8,18 @@ detector = aruco.ArucoDetector(aruco_dict, parameters)
 
 camara = cv2.VideoCapture(0)
 
+width = camara.get(cv2.CAP_PROP_FRAME_WIDTH)
+height = camara.get(cv2.CAP_PROP_FRAME_HEIGHT)
+print(f"Resolución inicial: {int(width)} x {int(height)}")
+
+camara.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+camara.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+width = camara.get(cv2.CAP_PROP_FRAME_WIDTH)
+height = camara.get(cv2.CAP_PROP_FRAME_HEIGHT)
+print(f"Resolución despues de setear 1280x720: {int(width)} x {int(height)}")
+
+
 while True:
     ret, frame = camara.read()
     if not ret:

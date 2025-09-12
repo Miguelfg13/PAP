@@ -4,7 +4,7 @@ import numpy as np
 # ==========================
 #  Apertura de cámara Win)
 # ==========================
-def open_camera(index=1, width=1920, height=1080, fps=30, prefer_mjpg=True):
+def open_camera(index=2, width=1920, height=1080, fps=30, prefer_mjpg=True):
     cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     if not cap.isOpened():
         cap = cv2.VideoCapture(index, cv2.CAP_MSMF)

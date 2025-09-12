@@ -13,7 +13,7 @@ aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 
 # Genera el marcador con ID # y tamaño ###x### pixeles
 marker_id = [1, 2, 3, 4, 5]
-marker_size = 200
+marker_size = 500
 
 for x in marker_id:
     marker_image = aruco.generateImageMarker(aruco_dict, x, marker_size)
