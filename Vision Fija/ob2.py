@@ -1,6 +1,6 @@
-# vision_goto_aruco_calib.py
+# vision_goto_aruco_calib_robusto.py
 # Reqs: opencv-contrib-python, numpy, firebase_admin
-# Ventanas: Click izq = fija objetivo; P=parar; M=modo orientación; C=calibrar; +/- zoom; ESC salir
+# Ventana: Click izq = fija objetivo; P=parar; M=modo orientación; C=calibrar; +/- zoom; ESC salir
 
 import cv2
 import numpy as np
@@ -208,10 +208,18 @@ def clear_target():
 def _sat(x, lim):
     return max(-lim, min(lim, x))
 
-# ===== Calibración =====
+# ===== Calibración (robusta) =====
 CALIB_PATH = "calib.json"
 CAL = {"C": [[1.0, 0.0],[0.0, 1.0]], "k_w": 1.0}
 _last_pose = {"gx": None, "gy": None, "ang_deg": None, "ts": 0.0}
+
+# --- nuevos parámetros robustos ---
+CAL_IMPULSE_V = 90.0      # antes 120 (más lento = menos blur)
+CAL_IMPULSE_W = 90.0
+CAL_IMPULSE_T = 1.4       # antes 1.2
+POSE_FRESH_MAX_AGE = 0.35 # s
+POSE_STABLE_FRAMES = 3    # nº de frames frescos tras el paro
+POSE_FINAL_WAIT = 2.0     # s
 
 def save_calib():
     try:
@@ -248,66 +256,105 @@ def _update_last_pose(gx, gy, ang_deg):
     _last_pose.update({"gx": gx, "gy": gy, "ang_deg": ang_deg, "ts": time.time()})
 
 def _wait_pose_fresh(timeout=2.0):
+    """Espera a que _last_pose tenga timestamp reciente."""
     t0 = time.time()
     while time.time() - t0 < timeout:
-        if _last_pose["gx"] is not None and (time.time() - _last_pose["ts"]) < 0.3:
+        if _last_pose["gx"] is not None and (time.time() - _last_pose["ts"]) < POSE_FRESH_MAX_AGE:
             return True
         time.sleep(0.02)
     return False
 
-def _impulse(cmd_vx, cmd_vy, cmd_w, T=1.2):
-    if not _wait_pose_fresh():
+def _wait_n_fresh_frames(n=POSE_STABLE_FRAMES, timeout=POSE_FINAL_WAIT):
+    """Espera N actualizaciones de pose 'fresca' seguidas (para valor estable)."""
+    got = 0
+    t0 = time.time()
+    last_ts = _last_pose["ts"]
+    while time.time() - t0 < timeout:
+        if _last_pose["gx"] is None:
+            got = 0
+        else:
+            if _last_pose["ts"] != last_ts and (time.time() - _last_pose["ts"]) < POSE_FRESH_MAX_AGE:
+                got += 1
+                last_ts = _last_pose["ts"]
+                if got >= n:
+                    return True
+        time.sleep(0.02)
+    return False
+
+def _impulse(cmd_vx, cmd_vy, cmd_w, T=CAL_IMPULSE_T):
+    """
+    Aplica un comando constante T segundos y devuelve (dgx, dgy, dth, T_eff).
+    Robusto a blur/pérdida temporal de marcadores.
+    """
+    if CURRENT_H_INV is None:
+        raise RuntimeError("No hay homografía para calibración.")
+    if not _wait_pose_fresh(timeout=2.0):
         raise RuntimeError("No hay pose fresca para iniciar el impulso.")
+
     gx0, gy0 = _last_pose["gx"], _last_pose["gy"]
     a0 = math.radians(_last_pose["ang_deg"] or 0.0)
 
+    # Enviar comando 'raw'
     _send_cmd(int(cmd_vx), int(cmd_vy), int(cmd_w))
     t0 = time.time()
     while time.time() - t0 < T:
+        _wait_pose_fresh(timeout=0.3)  # no bloqueante rígido
         time.sleep(0.01)
-    _stop_cmd()
-    time.sleep(0.2)
 
-    if not _wait_pose_fresh():
+    # Parar y esperar frames frescos
+    _stop_cmd()
+    if not _wait_n_fresh_frames(n=POSE_STABLE_FRAMES, timeout=POSE_FINAL_WAIT):
         raise RuntimeError("No hay pose fresca al finalizar el impulso.")
+
     gx1, gy1 = _last_pose["gx"], _last_pose["gy"]
     a1 = math.radians(_last_pose["ang_deg"] or 0.0)
+
     dth = math.atan2(math.sin(a1 - a0), math.cos(a1 - a0))
-    return (gx1 - gx0, gy1 - gy0, dth, T)
+    T_eff = time.time() - t0
+    return (gx1 - gx0, gy1 - gy0, dth, T_eff)
 
 def run_calibration():
-    print("[CAL] Iniciando calibración… Asegúrate de ver el robot.")
-    if not _wait_pose_fresh():
+    print("[CAL] Iniciando calibración… Asegúrate de ver robot y 4 esquinas.")
+    if CURRENT_H_INV is None:
+        print("[CAL][ERR] No hay homografía (4 esquinas visibles).")
+        return
+    if not _wait_pose_fresh(timeout=3.0):
         print("[CAL][ERR] No hay pose del robot visible.")
         return
-    U_lin = 120
-    U_w   = 120
-    T     = 1.2
+
+    U_lin = CAL_IMPULSE_V
+    U_w   = CAL_IMPULSE_W
+    T     = CAL_IMPULSE_T
+
     tests = [(+U_lin,0,0), (-U_lin,0,0), (0,+U_lin,0), (0,-U_lin,0)]
     obs=[]
     for (vx,vy,w) in tests:
         print(f"[CAL] Impulso lin: vx={vx}, vy={vy}")
         dgx, dgy, dth, Te = _impulse(vx,vy,w,T=T)
         obs.append((np.array([vx,vy],float), np.array([dgx/Te,dgy/Te],float)))
+
     Vcmd = np.stack([o[0] for o in obs], axis=0)
     Vobs = np.stack([o[1] for o in obs], axis=0)
     A_T  = np.linalg.pinv(Vcmd).dot(Vobs)
     A    = A_T.T
     print(f"[CAL] A estimada:\n{A}")
+
     print(f"[CAL] Impulso giro: w={U_w}")
     dgx, dgy, dth, Te = _impulse(0,0,U_w,T=T)
     omega_obs = dth/Te
     k_w = (omega_obs/float(U_w)) if (abs(U_w)>1e-6 and abs(omega_obs)>1e-6) else 1.0
     print(f"[CAL] k_w: {k_w:.6f}")
+
     try:
         C = np.linalg.inv(A)
     except np.linalg.LinAlgError:
         C = np.linalg.pinv(A)
         print("[CAL][WARN] A no invertible, usando pseudoinversa.")
+
     global CAL
     CAL = {"C": C.tolist(), "k_w": float(k_w if abs(k_w)>1e-6 else 1.0)}
     save_calib()
-    print("[CAL] ¡Listo! Se aplicará la corrección.")
+    print("[CAL] ¡Listo! Corrección aplicada.")
 
 # ===== Control GOTO =====
 def goto_controller_step(gx, gy, heading_deg):
@@ -371,8 +418,7 @@ def main():
     cap = open_camera(index=1, width=1920, height=1080, fps=30, prefer_mjpg=True)
 
     cv2.namedWindow("Cuadricula ArUco 1080p", cv2.WINDOW_NORMAL)
-    DISPLAY_SCALE = 0.75
-    _display_scale_ref["s"] = DISPLAY_SCALE
+    _display_scale_ref["s"] = 0.75
     cv2.setMouseCallback("Cuadricula ArUco 1080p", on_mouse)
 
     misses = 0
@@ -448,12 +494,14 @@ def main():
                 _update_last_pose(gx, gy, angle_grid)
                 goto_controller_step(gx, gy, angle_grid)
 
+        # Dibujo objetivo y línea guía
         draw_target_marker(frame, CURRENT_H)
         if _last_robot_px is not None and _target_g is not None and CURRENT_H is not None:
             tgt_px = grid_to_pix(_target_g[0], _target_g[1], CURRENT_H)
             if tgt_px is not None:
                 cv2.line(frame, _last_robot_px, tgt_px, (0,200,255), 2)
 
+        # HUD
         hud = [
             "[Click izq] Fijar objetivo   [P] Parar   [M] Modo orientación   [C] Calibrar",
             f"orient_move={'ON' if orient_move else 'OFF'}   Grid N={GRID_N}   +/- Zoom   ESC Salir"

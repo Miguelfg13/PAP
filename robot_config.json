@@ -1,0 +1,31 @@
+{
+    "camera": {
+        "index": 0,
+        "width": 1920,
+        "height": 1080,
+        "fps": 40
+    },
+    "robot": {
+        "id": 4,
+        "corner_ids": [
+            1,
+            2,
+            5,
+            3
+        ],
+        "grid_n": 10
+    },
+    "control": {
+        "kp_lin": 80.0,
+        "kp_w_face": 120.0,
+        "kp_w_hold": 120.0,
+        "cmd_max": 250,
+        "w_max": 250,
+        "pos_tolerance": 0.2
+    },
+    "firebase": {
+        "url": "https://iot-app-f878d-default-rtdb.firebaseio.com/",
+        "path": "robots/123456",
+        "cred_path": "C:/Users/migue/OneDrive - ITESO/9no/PAP/codes/Vision Fija/cred.json"
+    }
+}
