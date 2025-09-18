@@ -216,8 +216,8 @@ def escuchar_comandos():
             rotacion   = data.get("rotación", data.get("rotacion", {})) or {}
 
             vx_str = movimiento.get("vx", "0")
-            vy_str = movimiento.get("vy", "0")
-            w_str  = rotacion.get("w", "0")
+            vy_str = rotacion.get("w", "0")
+            w_str  = movimiento.get("vy", "0")
 
             try:
                 vx = int(float(vx_str))   # acepta "80" o "80.0"
