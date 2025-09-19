@@ -29,27 +29,29 @@ R  = 0.048      # Radio de rueda (m)
 l1 = 0.097      # Distancia centro a rueda frontal (m)
 l2 = 0.109      # Distancia centro a rueda trasera (m)
 
-# Matriz cinemática inversa para ruedas mecanum
+# Matriz cinemática inversa (alineada al segundo código)
+# Orden de ruedas: [FL, FR, RL, RR]
 W  = (1 / R) * np.array([
-    [ 1,  1, -(l1 + l2)],  # Rueda frontal izquierda
-    [ 1, -1,  (l1 + l2)],  # Rueda frontal derecha  
-    [ 1, -1, -(l1 + l2)],  # Rueda trasera izquierda
-    [ 1,  1,  (l1 + l2)]   # Rueda trasera derecha
+    [ 1,  1, -(l1 + l2)],  # FL
+    [ 1,  1,  (l1 + l2)],  # FR
+    [ 1, -1,  (l1 + l2)],  # RL
+    [ 1, -1, -(l1 + l2)]   # RR
 ], dtype=float)
 
-# Configuración de voltaje y PWM - COMPATIBLE CON INTERFAZ
-VOLT_MAX = 9.0            # Voltaje máximo del motor
+# Configuración de voltaje y PWM - (rango firmado -100..100 como el 2do código)
+VOLT_MAX = 9.0            # Voltaje máximo del motor (mantener por compatibilidad de logs)
 VOLT_MIN = 0.0            # Voltaje mínimo 
 INPUT_MAX = 250           # Rango máximo de la interfaz (-250 a +250)
-PWM_MAX = 255             # PWM máximo (0-255 para 8 bits)
-DEADBAND_VOLT = 0.5       # Zona muerta en voltios
+PWM_MAX = 100             # PWM firmado (-100..+100) para empatar con el 2do código
+DEADBAND_VOLT = 0.5       # Zona muerta en voltios (solo usada por ruta antigua)
 LOOP_DT = 0.05            # 20 Hz para mejor respuesta
 
 # Polaridad física por rueda (ajusta según la instalación física)
+# Equivale a invertir las ruedas 1 y 2 (índices 1 y 2) como en el 2do código
 MOTOR_POLARITY = np.array([1, -1, -1, 1], dtype=int)
 
 # Factor de escala para convertir comandos de control a velocidades físicas
-ESCALA_VEL = 50.0         # Escalado de comandos 0-9 a velocidades en mm/s
+ESCALA_VEL = 50.0         # (no usado en la ruta ajustada; se conserva por compatibilidad)
 
 # ==========================
 #     Firebase Init
@@ -94,33 +96,27 @@ except Exception as e:
     print(f"[SIMULACIÓN] I2C no disponible: {e}")
     class FakeBus:
         def write_i2c_block_data(self, addr, reg, data):
-            voltajes = [(d/255.0)*VOLT_MAX for d in data]
-            print(f"[SIM] I2C -> Addr:{hex(addr)}, Reg:{hex(reg)}")
-            print(f"      PWM: {data} -> Voltajes: [{voltajes[0]:.2f}V, {voltajes[1]:.2f}V, {voltajes[2]:.2f}V, {voltajes[3]:.2f}V]")
+            # En esta ruta ya enviamos PWM firmados (-100..100).
+            print(f"[SIM] I2C -> Addr:{hex(addr)}, Reg:{hex(reg)}, PWM firmados: {data}")
     bus = FakeBus()
 
 # ==========================
-#   Conversión y Control COMPATIBLE CON INTERFAZ
+#   Conversión y Control
 # ==========================
 def comando_a_voltaje(cmd_value):
-    """Convierte comando ±250 a voltaje ±9V"""
-    # Saturar al rango de entrada
+    """Convierte comando ±250 a voltaje ±9V (ruta antigua; se mantiene por compatibilidad)."""
     cmd_value = max(-INPUT_MAX, min(INPUT_MAX, cmd_value))
-    # Convertir proporcionalmente a voltaje
     return (cmd_value / INPUT_MAX) * VOLT_MAX
 
 def voltaje_a_pwm(voltaje):
-    """Convierte voltaje a PWM (0-255), manteniendo signo"""
+    """Convierte voltaje a PWM (0-255), manteniendo signo (ruta antigua; no usada en la nueva)."""
     voltaje_abs = abs(voltaje)
     if voltaje_abs < DEADBAND_VOLT:
         return 0, 1  # PWM=0, dirección=adelante
     
-    pwm = int((voltaje_abs / VOLT_MAX) * PWM_MAX)
-    pwm = min(pwm, PWM_MAX)
-    
-    # Determinar dirección (1=adelante, -1=atrás)
+    pwm = int((voltaje_abs / VOLT_MAX) * 255)
+    pwm = min(pwm, 255)
     direccion = 1 if voltaje >= 0 else -1
-    
     return pwm, direccion
 
 def aplicar_deadband_comando(cmd):
@@ -128,79 +124,59 @@ def aplicar_deadband_comando(cmd):
     deadband_cmd = INPUT_MAX * 0.02  # 2% del rango como zona muerta
     return 0 if abs(cmd) < deadband_cmd else cmd
 
+# ===== RUTA AJUSTADA: cinemática y salida PWM firmada (-100..100) =====
 def calcular_pwm_desde_comandos(cmd_vx, cmd_vy, cmd_w):
     """
-    Convierte comandos ±250 a PWM para cada rueda
-    
-    Args:
-        cmd_vx, cmd_vy, cmd_w: Comandos de entrada en rango ±250
-        
-    Returns:
-        Lista de 4 valores PWM con dirección
+    Convierte comandos ±250 a PWM firmados (-100..100) para cada rueda,
+    usando la cinemática del segundo código y la misma convención de signos.
+    Orden de ruedas: [FL, FR, RL, RR]
     """
-    # Aplicar zona muerta a comandos
+    # Zona muerta a nivel comando
     cmd_vx = aplicar_deadband_comando(cmd_vx)
-    cmd_vy = aplicar_deadband_comando(cmd_vy) 
-    cmd_w = aplicar_deadband_comando(cmd_w)
-    
-    # Los comandos ya vienen escalados desde la interfaz
-    # Solo necesitamos aplicar la cinemática inversa
-    vx = float(cmd_vx)  # Velocidad lineal X
-    vy = float(cmd_vy)  # Velocidad lineal Y  
-    w = float(cmd_w) * 0.5  # Velocidad angular (reducir para mejor control)
-    
-    # Calcular velocidades de rueda usando cinemática inversa simplificada
-    # Para ruedas mecanum: [FL, FR, RL, RR]
-    vel_ruedas = np.array([
-        vx + vy - w,  # Frontal izquierda
-        vx - vy + w,  # Frontal derecha
-        vx - vy - w,  # Trasera izquierda  
-        vx + vy + w   # Trasera derecha
-    ], dtype=float)
-    
-    # Normalizar si alguna rueda excede el límite
-    vel_max_actual = np.max(np.abs(vel_ruedas))
-    if vel_max_actual > INPUT_MAX:
-        factor_escala = INPUT_MAX / vel_max_actual
-        vel_ruedas = vel_ruedas * factor_escala
-        print(f"[INFO] Escalando velocidades por factor {factor_escala:.3f}")
-    
-    # Convertir a PWM y dirección para cada rueda
-    pwm_values = []
-    direcciones = []
-    voltajes = []
-    
-    for i, vel in enumerate(vel_ruedas):
-        # Aplicar polaridad de motor
-        vel_con_polaridad = vel * MOTOR_POLARITY[i]
-        
-        # Convertir a voltaje
-        voltaje = comando_a_voltaje(vel_con_polaridad)
-        voltajes.append(voltaje)
-        
-        # Convertir a PWM con dirección
-        pwm, direccion = voltaje_a_pwm(voltaje)
-        pwm_values.append(pwm)
-        direcciones.append(direccion)
-    
+    cmd_vy = aplicar_deadband_comando(cmd_vy)
+    cmd_w  = aplicar_deadband_comando(cmd_w)
+
+    # Conserva la escala de entrada (no se reduce w como antes)
+    vx = float(cmd_vx)
+    vy = float(cmd_vy)
+    w  = float(cmd_w)
+
+    # Velocidades de ruedas por cinemática (segundo código)
+    V = np.array([vx, vy, w], dtype=float)
+    vel_ruedas = (W @ V).astype(float)  # [FL, FR, RL, RR]
+
+    # Escalado si excede ±INPUT_MAX
+    vmax = np.max(np.abs(vel_ruedas))
+    if vmax > INPUT_MAX:
+        vel_ruedas /= (vmax / INPUT_MAX)
+        print(f"[INFO] Escalando velocidades por factor {(vmax/INPUT_MAX):.3f}")
+
+    # Aplicar polaridad física por rueda (equivale a flip de 2do código en ruedas 1 y 2)
+    vel_ruedas = vel_ruedas * MOTOR_POLARITY
+
+    # Mapear a PWM firmado en -100..100
+    pwm = np.clip((vel_ruedas / INPUT_MAX) * PWM_MAX, -PWM_MAX, PWM_MAX)
+    pwm_values = [int(round(p)) for p in pwm]
+
+    # Para compatibilidad con logs existentes
+    direcciones = [1 if p >= 0 else -1 for p in pwm_values]
+    voltajes = [0.0, 0.0, 0.0, 0.0]  # no se usan en esta ruta
+
     return pwm_values, direcciones, voltajes
 
 def enviar_comandos_motor(cmd_vx, cmd_vy, cmd_w):
-    """Envía comandos a los motores via I2C"""
+    """Envía comandos a los motores via I2C (PWM firmados -100..100)."""
     try:
         pwm_values, direcciones, voltajes = calcular_pwm_desde_comandos(cmd_vx, cmd_vy, cmd_w)
-        
-        # Para controladores que manejan dirección separada, 
-        # aquí podrías enviar PWM y dirección por separado
-        # Por ahora, enviamos PWM directamente
+
+        # Enviar PWM firmados directamente, igual que el segundo código
         bus.write_i2c_block_data(DIRECCION_MOTORES, REG_VELOCIDAD_FIJA, pwm_values)
         
         # Log para monitoreo (solo si hay movimiento)
         if any(cmd != 0 for cmd in [cmd_vx, cmd_vy, cmd_w]):
             print(f"[MOTOR] Cmd: vx={cmd_vx:>4} vy={cmd_vy:>4} w={cmd_w:>4}")
-            print(f"        PWM: {pwm_values}")
+            print(f"        PWM: {pwm_values}  (firma: -{PWM_MAX}..+{PWM_MAX})")
             print(f"        Dir: {direcciones}")
-            print(f"        V: [{voltajes[0]:.2f}, {voltajes[1]:.2f}, {voltajes[2]:.2f}, {voltajes[3]:.2f}]V")
             
     except Exception as e:
         print(f"[ERROR] Enviando a motores: {e}")

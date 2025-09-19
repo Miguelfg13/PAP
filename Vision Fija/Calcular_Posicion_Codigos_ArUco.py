@@ -23,7 +23,7 @@ dist_coeffs = np.array(valores["coef_dist"])  # o con ceros si no tenés distors
 
 marker_length = 0.05  # en metros (5 cm)
 
-camara = cv2.VideoCapture(0)
+camara = cv2.VideoCapture(1)
 
 camara.set(cv2.CAP_PROP_FRAME_HEIGHT, 1920)
 camara.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)

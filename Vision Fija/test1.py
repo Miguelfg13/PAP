@@ -47,6 +47,8 @@ class ArucoRobotGUI:
         self.robot_id = tk.IntVar(value=4)
         self.corner_ids = [tk.IntVar(value=1), tk.IntVar(value=2), tk.IntVar(value=5), tk.IntVar(value=3)]
         self.grid_n = tk.IntVar(value=10)
+        self.camera_exposure = tk.IntVar(value=-6)
+        self.camera_brightness = tk.DoubleVar(value=0.3)
         
         # Variables del control
         self.kp_lin = tk.DoubleVar(value=80.0)
@@ -110,10 +112,11 @@ class ArucoRobotGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
     def create_interface(self):
+        
         """Crea la interfaz gráfica completa"""
         # Estilo
         style = ttk.Style()
-        style.theme_use('clam')
+        style.theme_use('alt')
         style.configure('Title.TLabel', font=('Arial', 12, 'bold'), background='#2b2b2b', foreground='white')
         style.configure('Header.TLabel', font=('Arial', 10, 'bold'), background='#2b2b2b', foreground='#4CAF50')
         style.configure('Status.TLabel', font=('Arial', 9), background='#2b2b2b', foreground='#FFC107')
@@ -162,6 +165,11 @@ class ArucoRobotGUI:
         firebase_frame = ttk.Frame(notebook)
         notebook.add(firebase_frame, text="Firebase")
         self.create_firebase_config(firebase_frame)
+
+        # Pestaña 5: Control Manual
+        manual_frame = ttk.Frame(notebook)
+        notebook.add(manual_frame, text="Manual")
+        self.create_manual_control(manual_frame)
         
         # Botones principales
         self.create_main_buttons(parent)
@@ -209,6 +217,11 @@ class ArucoRobotGUI:
         for i, (label_text, var, min_val, max_val) in enumerate(configs):
             ttk.Label(basic_group, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=2)
             ttk.Spinbox(basic_group, from_=min_val, to=max_val, textvariable=var, width=10).grid(row=i, column=1, padx=(10,0), pady=2)
+            ttk.Label(basic_group, text="Exposición (-11 a -1):").grid(row=4, column=0, sticky=tk.W, pady=2)
+            ttk.Spinbox(basic_group, from_=-11, to=-1, textvariable=self.camera_exposure, width=10).grid(row=4, column=1, padx=(10,0), pady=2)
+
+            ttk.Label(basic_group, text="Brillo (0.0 a 1.0):").grid(row=5, column=0, sticky=tk.W, pady=2)
+            ttk.Scale(basic_group, from_=0.0, to=1.0, variable=self.camera_brightness, orient=tk.HORIZONTAL, length=100).grid(row=5, column=1, padx=(10,0), pady=2)
         
         # Resoluciones predefinidas
         res_group = ttk.LabelFrame(parent, text="Resoluciones Rápidas", padding=10)
@@ -313,6 +326,57 @@ class ArucoRobotGUI:
         
         disconnect_btn = ttk.Button(btn_frame, text="Desconectar", command=self.disconnect_firebase)
         disconnect_btn.pack(side=tk.LEFT)
+
+    def create_manual_control(self, parent):
+        """Control manual del robot"""
+        # Título
+        title_group = ttk.LabelFrame(parent, text="Control Manual del Robot", padding=10)
+        title_group.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Marco para botones de dirección
+        direction_frame = ttk.Frame(title_group)
+        direction_frame.pack(pady=10)
+        
+        # Velocidad manual
+        speed_frame = ttk.Frame(title_group)
+        speed_frame.pack(pady=5)
+        ttk.Label(speed_frame, text="Velocidad:").pack(side=tk.LEFT)
+        self.manual_speed = tk.IntVar(value=100)
+        ttk.Scale(speed_frame, from_=50, to=250, variable=self.manual_speed, 
+                orient=tk.HORIZONTAL, length=150).pack(side=tk.LEFT, padx=10)
+        speed_label = ttk.Label(speed_frame, text="100")
+        speed_label.pack(side=tk.LEFT)
+        self.manual_speed.trace_add('write', lambda *args: speed_label.configure(text=str(self.manual_speed.get())))
+        
+        # Disposición de botones en cruz
+        #     ↑
+        #   ← ● →
+        #     ↓
+        
+        # Botón Adelante
+        btn_up = ttk.Button(direction_frame, text="↑", width=3, command=lambda: self.manual_command(0, self.manual_speed.get(), 0))
+        btn_up.grid(row=0, column=1, padx=2, pady=2)
+        
+        # Botones Izquierda y Derecha
+        btn_left = ttk.Button(direction_frame, text="←", width=3, command=lambda: self.manual_command(-self.manual_speed.get(), 0, 0))
+        btn_left.grid(row=1, column=0, padx=2, pady=2)
+        
+        btn_right = ttk.Button(direction_frame, text="→", width=3, command=lambda: self.manual_command(self.manual_speed.get(), 0, 0))
+        btn_right.grid(row=1, column=2, padx=2, pady=2)
+        
+        # Botón Atrás
+        btn_down = ttk.Button(direction_frame, text="↓", width=3, command=lambda: self.manual_command(0, -self.manual_speed.get(), 0))
+        btn_down.grid(row=2, column=1, padx=2, pady=2)
+        
+        # Botones de rotación
+        rotate_frame = ttk.Frame(title_group)
+        rotate_frame.pack(pady=10)
+        
+        ttk.Button(rotate_frame, text="↻ Girar Izq", command=lambda: self.manual_command(0, 0, -self.manual_speed.get())).pack(side=tk.LEFT, padx=5)
+        ttk.Button(rotate_frame, text="↺ Girar Der", command=lambda: self.manual_command(0, 0, self.manual_speed.get())).pack(side=tk.LEFT, padx=5)
+        
+        # Botón de parada
+        ttk.Button(title_group, text="⏹ PARAR", command=lambda: self.manual_command(0, 0, 0)).pack(pady=10)
         
     def create_main_buttons(self, parent):
         """Botones principales de control"""
@@ -681,6 +745,9 @@ class ArucoRobotGUI:
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height.get())
         cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
         cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        # Control de exposición y brillo
+        cap.set(cv2.CAP_PROP_EXPOSURE, self.camera_exposure.get())
+        cap.set(cv2.CAP_PROP_BRIGHTNESS, self.camera_brightness.get())
         
         return cap
         
@@ -1285,6 +1352,35 @@ class ArucoRobotGUI:
         self._hold_heading_rad = None
         self.stop_robot()
         self.root.after(0, lambda: self.target_position.set("Sin objetivo"))
+    
+    def manual_command(self, vx, vy, w):
+        """Enviar comando manual al robot"""
+        if not self.firebase_connected:
+            messagebox.showwarning("Sin Conexión", "Conecta a Firebase primero")
+            return
+        
+        try:
+            # Limpiar objetivo automático si existe
+            self._target_g = None
+            self._hold_heading_rad = None
+            
+            # Enviar comando directamente
+            self.firebase_queue.put_nowait({
+                'type': 'movement',
+                'vx': int(vx),
+                'vy': int(vy)
+            })
+            self.firebase_queue.put_nowait({
+                'type': 'rotation', 
+                'w': int(w)
+            })
+            
+            print(f"[MANUAL] vx={vx} vy={vy} w={w}")
+            
+        except queue.Full:
+            print("[MANUAL][WARN] Cola Firebase llena")
+        except Exception as e:
+            print(f"[MANUAL][ERROR] {e}")
     
     def stop_robot(self):
         """Parar robot - NO BLOQUEA"""
