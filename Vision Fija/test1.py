@@ -353,20 +353,18 @@ class ArucoRobotGUI:
         #   ← ● →
         #     ↓
         
-        # Botón Adelante
+
         
         
         btn_up = ttk.Button(direction_frame, text="↑", width=3, command=lambda: self.manual_command(self.manual_speed.get(), 0, 0))
         btn_up.grid(row=0, column=1, padx=2, pady=2)
         
-        # Botón Atrás
         btn_left = ttk.Button(direction_frame, text="←", width=3, command=lambda: self.manual_command(0, -self.manual_speed.get(), 0))
         btn_left.grid(row=1, column=0, padx=2, pady=2)
         
         btn_right = ttk.Button(direction_frame, text="→", width=3, command=lambda: self.manual_command(0, self.manual_speed.get(), 0))
         btn_right.grid(row=1, column=2, padx=2, pady=2)
         
-        # Botones Izquierda y Derecha
         btn_down = ttk.Button(direction_frame,text="↓", width=3, command=lambda: self.manual_command(-self.manual_speed.get(), 0, 0))
         btn_down.grid(row=2, column=1, padx=2, pady=2)
 
@@ -1436,9 +1434,18 @@ class ArucoRobotGUI:
         
         self._target_reached_logged = False
 
-        # Control proporcional lineal
-        vx_cmd = self.kp_lin.get() * ex
-        vy_cmd = self.kp_lin.get() * ey
+        # Control proporcional lineal en coordenadas de la malla
+        vx_grid = self.kp_lin.get() * ex
+        vy_grid = self.kp_lin.get() * ey
+
+        # Transformar comandos de malla a coordenadas del robot
+        # El robot usa: vx=adelante/atrás, vy=izquierda/derecha
+        # La malla usa: x=horizontal, y=vertical
+        th = math.radians(heading_deg)
+        
+        # Rotar el vector de velocidad del marco de malla al marco del robot
+        vx_cmd = vx_grid * math.cos(th) + vy_grid * math.sin(th)  # Componente hacia adelante
+        vy_cmd = -vx_grid * math.sin(th) + vy_grid * math.cos(th)  # Componente lateral
 
         # Limitar norma del vector
         norm = math.hypot(vx_cmd, vy_cmd)
