@@ -1,0 +1,37 @@
+{
+    "camera": {
+        "index": 1,
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "exposure": -6.0,
+        "brightness": 0.1
+    },
+    "robot": {
+        "id": 4,
+        "corner_ids": [
+            1,
+            2,
+            5,
+            3
+        ],
+        "grid_n": 10
+    },
+    "control": {
+        "kp_lin": 60.0,
+        "kp_w_face": 80.0,
+        "kp_w_hold": 70.0,
+        "ki_lin": 8.0,
+        "ki_w_face": 10.0,
+        "ki_w_hold": 8.0,
+        "cmd_max": 200,
+        "w_max": 150,
+        "pos_tolerance": 0.25,
+        "integral_max": 50.0
+    },
+    "firebase": {
+        "url": "https://iot-app-f878d-default-rtdb.firebaseio.com/",
+        "path": "robots/123456",
+        "cred_path": "cred.json"
+    }
+}

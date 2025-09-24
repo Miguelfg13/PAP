@@ -216,7 +216,7 @@ _last_pose = {"gx": None, "gy": None, "ang_deg": None, "ts": 0.0}
 # --- nuevos parámetros robustos ---
 CAL_IMPULSE_V = 90.0      # antes 120 (más lento = menos blur)
 CAL_IMPULSE_W = 90.0
-CAL_IMPULSE_T = 1.4       # antes 1.2
+CAL_IMPULSE_T = 1.4       # antes 1.2A
 POSE_FRESH_MAX_AGE = 0.35 # s
 POSE_STABLE_FRAMES = 3    # nº de frames frescos tras el paro
 POSE_FINAL_WAIT = 2.0     # s
