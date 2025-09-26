@@ -3,30 +3,23 @@ import cv2.aruco as aruco
 import numpy as np
 import json
 import os
-
-# Se obtienen los valores de los paramatros de la camara del archivo json.
-def obtener_parametros():
-    direccion_carpeta = os.path.dirname(os.path.abspath(__file__))
-    dir = os.path.join(direccion_carpeta, "parametros_camara.json")
-    with open(dir, "r") as f:
-        parametros = json.load(f)
-
-    return parametros
+from Funciones_Codigos import obtener_Parametros_Camara
 
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 parameters = aruco.DetectorParameters()
 detector = aruco.ArucoDetector(aruco_dict, parameters)
 
-valores = obtener_parametros()
-camera_matrix = np.array(valores["matriz_camara"])
-dist_coeffs = np.array(valores["coef_dist"])  # o con ceros si no tenés distorsión
-
-marker_length = 0.05  # en metros (5 cm)
+parametros_camara = obtener_Parametros_Camara()
+resolucion_height = parametros_camara["resolucion_height"]
+resolucion_width = parametros_camara["resolucion_width"]
+camera_matrix = np.array(parametros_camara["matriz_camara"])
+dist_coeffs = np.array(parametros_camara["coef_dist"])
+marker_length = 0.143
 
 camara = cv2.VideoCapture(1)
 
-camara.set(cv2.CAP_PROP_FRAME_HEIGHT, 1920)
-camara.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
+camara.set(cv2.CAP_PROP_FRAME_HEIGHT, resolucion_height)
+camara.set(cv2.CAP_PROP_FRAME_WIDTH, resolucion_width)
 
 while True:
     ret, frame = camara.read()

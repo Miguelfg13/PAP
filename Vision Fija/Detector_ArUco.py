@@ -2,15 +2,14 @@ import cv2
 import cv2.aruco as aruco
 
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
-
 parameters = aruco.DetectorParameters()
 detector = aruco.ArucoDetector(aruco_dict, parameters)
 
-camara = cv2.VideoCapture(0)
+camara = cv2.VideoCapture(1)
 
-width = camara.get(cv2.CAP_PROP_FRAME_WIDTH)
-height = camara.get(cv2.CAP_PROP_FRAME_HEIGHT)
-print(f"Resolución inicial: {int(width)} x {int(height)}")
+# width = camara.get(cv2.CAP_PROP_FRAME_WIDTH)
+# height = camara.get(cv2.CAP_PROP_FRAME_HEIGHT)
+# print(f"Resolución inicial: {int(width)} x {int(height)}")
 
 camara.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 camara.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)

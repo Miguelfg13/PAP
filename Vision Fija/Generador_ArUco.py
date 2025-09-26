@@ -12,8 +12,8 @@ path_2 = os.path.join(path_1, "Codigos_ArUco")
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 
 # Genera el marcador con ID # y tamaño ###x### pixeles
-marker_id = [1, 2, 3, 4, 5]
-marker_size = 500
+marker_id = [20, 21, 23, 24]
+marker_size = 250
 
 for x in marker_id:
     marker_image = aruco.generateImageMarker(aruco_dict, x, marker_size)
