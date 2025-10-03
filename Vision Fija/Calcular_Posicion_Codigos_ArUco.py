@@ -16,7 +16,7 @@ camera_matrix = np.array(parametros_camara["matriz_camara"])
 dist_coeffs = np.array(parametros_camara["coef_dist"])
 marker_length = 0.143
 
-camara = cv2.VideoCapture(1)
+camara = cv2.VideoCapture(0)
 
 camara.set(cv2.CAP_PROP_FRAME_HEIGHT, resolucion_height)
 camara.set(cv2.CAP_PROP_FRAME_WIDTH, resolucion_width)

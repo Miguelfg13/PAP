@@ -4,7 +4,7 @@ import csv
 import numpy as np
 from Funciones_Codigos import obtener_Direccion_Carpeta_Absoluta, juntar_Direccion_Archivo
 
-ruta_video = juntar_Direccion_Archivo(obtener_Direccion_Carpeta_Absoluta(), 'video_RealvsCodigo.avi')
+ruta_video = juntar_Direccion_Archivo(obtener_Direccion_Carpeta_Absoluta(), 'videoSalida.avi')
 
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 parameters = aruco.DetectorParameters()
@@ -18,8 +18,8 @@ rejilla_coords = {
     3: (0.0, 1.803),
     5: (2.554, 1.803)
 }
-frente_id = 21
-atras_id = 22
+frente_id = 23
+atras_id = 24
 
 
 video = cv2.VideoCapture(ruta_video)
