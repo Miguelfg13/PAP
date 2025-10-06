@@ -6,8 +6,8 @@ import Funciones_Codigos as fc
 # DICT_4x4_50, DICT_5x5_100, DICT_6x6_250, DICT_7x7_1000, DICT_ARUCO_ORIGINAL -> 1024
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 
-id_codigos = [20, 21, 23, 24]   # ID de los códigos ArUco
-tamaño_codigo = 250             # tamaño en pixeles
+id_codigos = [1, 2, 3, 4, 5]   # ID de los códigos ArUco
+tamaño_codigo = 300             # tamaño en pixeles
 
 for x in id_codigos:
     imagen_codigo = aruco.generateImageMarker(aruco_dict, x, tamaño_codigo)
