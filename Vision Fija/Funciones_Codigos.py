@@ -87,7 +87,7 @@ def guardar_Parametros_Camara(matriz_camara, coeficientes_distorsion):
     with open(direccion, "w") as f:
         json.dump(datos, f, indent=4) 
 
-def gurdar_Parametros_Extrinsecos_Camara(matriz_rotacion, vector_traslancion):
+def guardar_Parametros_Extrinsecos_Camara(matriz_rotacion, vector_traslancion):
     estructura_datos = {
         "matriz_rotacion" : matriz_rotacion.tolist(),
         "vector_traslacion" : vector_traslancion.tolist()
